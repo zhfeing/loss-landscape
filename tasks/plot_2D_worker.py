@@ -1,15 +1,13 @@
 import os
 import logging
-import shutil
 import time
-from collections import OrderedDict
 from logging.handlers import QueueHandler
-from typing import Dict, Any, Iterable, List, Tuple
+from typing import Dict, Any
 import datetime
 import yaml
 
 import torch
-from torch import nn, Tensor
+import torch.nn as nn
 import torch.cuda
 import torch.distributed as dist
 from torch.utils.data import DataLoader
@@ -19,14 +17,51 @@ from torch.cuda import amp
 import cv_lib.utils as utils
 import cv_lib.distributed.utils as dist_utils
 
-from vit_mutual.data import build_train_dataset
 from vit_mutual.models import get_model
+from vit_mutual.loss import get_loss_fn
 from vit_mutual.eval import Evaluation
 import vit_mutual.utils as vit_utils
 
 from loss_landscape.utils import DistLaunchArgs, LogArgs
 from loss_landscape.direction import setup_direction
 from loss_landscape.surface import setup_coordinates
+from data import build_dataset
+
+
+class PlotWorker:
+    def __init__(
+        self,
+        coordinate_fp: str,
+        data_loader: DataLoader,
+        model: nn.Module,
+        loss_fn: nn.Module,
+        evaluator: Evaluation,
+        device: torch.device
+    ):
+        coordinates = torch.load(coordinate_fp, map_location=device)
+        self.x_coordinates = coordinates["x_coordinates"]
+        self.y_coordinates = coordinates["y_coordinates"]
+        self.run_groups = len(self.x_coordinates), len(self.y_coordinates)
+
+        self.model = model
+        self.loss_fn = loss_fn
+        self.data_loader = data_loader
+        self.evaluator = evaluator
+
+        self.loss_map = torch.empty(size=self.run_groups, device=device)
+        self.acc_map = torch.empty_like(self.loss_map)
+        self.device = device
+
+        self._assign_tasks()
+
+    def _assign_tasks(self):
+        x_steps = torch.arange(self.run_groups[0])
+        y_steps = torch.arange(self.run_groups[1])
+        assignment_ids = torch.cartesian_prod(x_steps, y_steps)
+        assignments = torch.arange(0, assignment_ids.shape[0]) % dist_utils.get_world_size() == dist_utils.get_rank()
+
+    def __call__(self):
+        self.evaluator(self.model)
 
 
 def plot_2D_worker(
@@ -35,9 +70,8 @@ def plot_2D_worker(
     log_args: LogArgs,
     global_cfg: Dict[str, Any]
 ):
-    """
-    What created in this function is only used in this process and not shareable
-    """
+    ################################################################################
+    # Initialization
     # setup process root logger
     if launch_args.distributed:
         root_logger = logging.getLogger()
@@ -49,8 +83,8 @@ def plot_2D_worker(
     # split configs
     data_cfg: Dict[str, Any] = global_cfg["dataset"]
     train_cfg: Dict[str, Any] = global_cfg["training"]
-    val_cfg: Dict[str, Any] = global_cfg["validation"]
     model_cfg: Dict[str, Any] = global_cfg["model"]
+    loss_cfg: Dict[str, Any] = global_cfg["loss"]
     plot_cfg: Dict[str, Any] = global_cfg["plot"]
 
     distributed = launch_args.distributed
@@ -89,12 +123,7 @@ def plot_2D_worker(
 
     # get dataloader
     logger.info("Building dataset...")
-    train_loader, val_loader, n_classes = build_train_dataset(
-        data_cfg,
-        train_cfg,
-        val_cfg,
-        launch_args
-    )
+    train_loader, n_classes = build_dataset(data_cfg, train_cfg)
     # create model
     logger.info("Building model...")
     model = get_model(model_cfg, n_classes)
@@ -110,13 +139,9 @@ def plot_2D_worker(
         )
         logger.info("Loaded pretrain model: %s", train_cfg["pre_train"])
     model.to(device)
-    # model_without_ddp = model
     if distributed:
-        if train_cfg.get("sync_bn", False):
-            logger.warning("Convert model `BatchNorm` to `SyncBatchNorm`")
-            model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu_id])
-
+    loss_fn = get_loss_fn(loss_cfg).to(device)
     # setup direction
     direction_fp = os.path.join(log_args.logdir, "direction.pth")
     if dist_utils.is_main_process():
@@ -127,15 +152,26 @@ def plot_2D_worker(
             **plot_cfg["direction"]
         )
     # setup surface
-    surface_file = os.path.join(log_args.logdir, "surface.pth")
+    coordinates_fp = os.path.join(log_args.logdir, "coordinates.pth")
     if dist_utils.is_main_process():
         setup_coordinates(
-            surface_fp=surface_file,
-            direction_fp=direction_fp,
+            coordinates_fp=coordinates_fp,
             override=launch_args.override,
             coordinate_cfg=plot_cfg["coordinate"],
             device=device
         )
-    dist_utils.barrier()
-    directions = torch.load(direction_fp, map_location="cuda")
-
+    evaluator = Evaluation(
+        loss_fn=loss_fn,
+        val_loader=train_loader,
+        loss_weights=loss_cfg["weight_dict"],
+        device=device
+    )
+    worker = PlotWorker(
+        coordinate_fp=coordinates_fp,
+        data_loader=train_loader,
+        model=model,
+        loss_fn=loss_fn,
+        evaluator=evaluator,
+        device=device
+    )
+    worker()

@@ -7,6 +7,8 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 
+from .projection import flatten
+
 
 def setup_direction(
     direction_fp: str,
@@ -33,6 +35,9 @@ def setup_direction(
         norm=norm,
         ignore=ignore
     )
+    # sim = torch.cosine_similarity(flatten(directions["x_direction"]), flatten(directions["y_direction"]), dim=0)
+    # logger.info("Cosine similarity between x-axis and y-axis is: %s", str(sim))
+
     torch.save(directions, direction_fp)
     logger.info("Write direction done")
 

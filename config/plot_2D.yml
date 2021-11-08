@@ -38,3 +38,8 @@ plot:
       start: -1
       end: 1
       steps: 51
+
+loss:
+  name: ce_loss
+  weight_dict:
+    cls: 1.0

@@ -7,8 +7,7 @@ import torch
 
 
 def setup_coordinates(
-    surface_fp: str,
-    direction_fp: str,
+    coordinates_fp: str,
     coordinate_cfg: Dict[str, Any],
     device: torch.device,
     override: bool = True
@@ -16,7 +15,7 @@ def setup_coordinates(
     logger = logging.getLogger("setup_direction")
     logger.info("Setting up directions")
 
-    if os.path.isfile(surface_fp) and not override:
+    if os.path.isfile(coordinates_fp) and not override:
         logger.info("Surface file already exists")
         return
 
@@ -25,5 +24,5 @@ def setup_coordinates(
     coordinates["x_coordinates"] = x_coordinates
     y_coordinates = torch.linspace(device=device, **coordinate_cfg["y_axis"])
     coordinates["y_coordinates"] = y_coordinates
-    torch.save(coordinates, direction_fp)
+    torch.save(coordinates, coordinates_fp)
     logger.info("Write coordinates done")
