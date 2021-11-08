@@ -8,3 +8,4 @@ cifar10/plots/*.h5
 cifar10/data/
 cifar10/trained_nets/
 .vscode
+run/

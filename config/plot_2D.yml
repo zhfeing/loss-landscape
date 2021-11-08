@@ -1,0 +1,40 @@
+dataset:
+  name: cifar_100
+  root: ~/datasets/cifar
+  train:
+    split: train
+  val:
+    split: test
+  resize: 224
+
+training:
+  train_epochs: 240
+  print_interval: 20
+  val_interval: 1000
+  batch_size: 64
+  num_workers: 16
+  sync_bn: True
+  pre_train: Null
+
+validation:
+  batch_size: 128
+  num_workers: 16
+
+model:
+  # cfg names
+  name: official_models
+  model_name: ResNet18
+
+plot:
+  direction:
+    norm: filter
+    ignore: bias_bn
+  coordinate:
+    x_axis:
+      start: -1
+      end: 1
+      steps: 51
+    y_axis:
+      start: -1
+      end: 1
+      steps: 51
