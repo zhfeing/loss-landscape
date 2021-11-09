@@ -14,16 +14,12 @@ training:
   batch_size: 64
   num_workers: 16
   sync_bn: True
-  pre_train: Null
-
-validation:
-  batch_size: 128
-  num_workers: 16
+  pre_train: ~/project/ViT-research/run/cifar100/resnet/efficientnet_b2-SGD-s-1029/ckpt/best.pth
 
 model:
   # cfg names
   name: official_models
-  model_name: ResNet18
+  model_name: efficientnet_b2
 
 plot:
   direction:
@@ -38,6 +34,8 @@ plot:
       start: -1
       end: 1
       steps: 51
+  cfg:
+    levels: 5
 
 loss:
   name: ce_loss

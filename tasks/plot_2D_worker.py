@@ -1,10 +1,9 @@
 import os
 import logging
-import time
 from logging.handlers import QueueHandler
-from typing import Dict, Any
-import datetime
+from typing import Dict, Any, List
 import yaml
+import copy
 
 import torch
 import torch.nn as nn
@@ -12,7 +11,6 @@ import torch.cuda
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 import torch.backends.cudnn
-from torch.cuda import amp
 
 import cv_lib.utils as utils
 import cv_lib.distributed.utils as dist_utils
@@ -25,6 +23,8 @@ import vit_mutual.utils as vit_utils
 from loss_landscape.utils import DistLaunchArgs, LogArgs
 from loss_landscape.direction import setup_direction
 from loss_landscape.surface import setup_coordinates
+from loss_landscape.model_setter import set_weights
+from loss_landscape.plot_contour import plot_contour
 from data import build_dataset
 
 
@@ -32,36 +32,98 @@ class PlotWorker:
     def __init__(
         self,
         coordinate_fp: str,
+        direction_fp: str,
+        eval_fp: str,
+        save_path: str,
         data_loader: DataLoader,
         model: nn.Module,
         loss_fn: nn.Module,
         evaluator: Evaluation,
+        plot_cfg: Dict[str, Any],
         device: torch.device
     ):
-        coordinates = torch.load(coordinate_fp, map_location=device)
-        self.x_coordinates = coordinates["x_coordinates"]
-        self.y_coordinates = coordinates["y_coordinates"]
-        self.run_groups = len(self.x_coordinates), len(self.y_coordinates)
+        self.rank = dist_utils.get_rank()
+        self.world_size = dist_utils.get_world_size()
+        self.logger = logging.getLogger("plot_worker_{}".format(self.rank))
+
+        self.coordinate_fp = coordinate_fp
+        coordinates: Dict[str, torch.Tensor] = torch.load(coordinate_fp, map_location=device)
+        self.x_coordinate = coordinates["x_coordinate"]
+        self.y_coordinate = coordinates["y_coordinate"]
+        self.run_groups = len(self.x_coordinate), len(self.y_coordinate)
+
+        self.direction_fp = direction_fp
+        directions = torch.load(direction_fp, map_location=device)
+        self.x_direction = directions["x_direction"]
+        self.y_direction = directions["y_direction"]
+
+        self.save_path = save_path
+        self.eval_fp = eval_fp
 
         self.model = model
+        self.model_state_dict = copy.deepcopy(self.model.state_dict())
         self.loss_fn = loss_fn
         self.data_loader = data_loader
         self.evaluator = evaluator
+        self.plot_cfg = plot_cfg
 
-        self.loss_map = torch.empty(size=self.run_groups, device=device)
-        self.acc_map = torch.empty_like(self.loss_map)
+        self.loss_map = torch.zeros(size=self.run_groups, device=device)
+        self.acc_map = torch.zeros_like(self.loss_map)
         self.device = device
 
-        self._assign_tasks()
-
-    def _assign_tasks(self):
+        # assign tasks
         x_steps = torch.arange(self.run_groups[0])
         y_steps = torch.arange(self.run_groups[1])
-        assignment_ids = torch.cartesian_prod(x_steps, y_steps)
-        assignments = torch.arange(0, assignment_ids.shape[0]) % dist_utils.get_world_size() == dist_utils.get_rank()
+        self.total_tasks = torch.cartesian_prod(x_steps, y_steps)
+        self.assignments = torch.arange(0, self.total_tasks.shape[0]) % self.world_size
+        self.tasks = self.total_tasks[self.assignments == self.rank]
+        self.logger.info("Total %d tasks, assigned %d tasks", len(self.total_tasks), len(self.tasks))
+
+    def eval(self):
+        for task_id, assigned_id in enumerate(self.tasks):
+            self.model.load_state_dict(self.model_state_dict)
+            x_step = self.x_coordinate[assigned_id[0]]
+            y_step = self.y_coordinate[assigned_id[1]]
+            self.logger.info("step: (%f, %f)", x_step.item(), y_step.item())
+            # modify model weights
+            set_weights(self.model, self.x_direction, self.y_direction, x_step, y_step)
+            # evaluate
+            result = self.evaluator(self.model)
+            loss = result["loss"]
+            acc1 = result["acc"][1]
+            self.logger.info("task: %d|%d, loss: %.5f, acc: %.4f", task_id, len(self.tasks), loss.item(), acc1.item())
+            self.loss_map[assigned_id[0], assigned_id[1]] = loss
+            self.acc_map[assigned_id[0], assigned_id[1]] = acc1
+
+        self.logger.info("Waiting for all task done...")
+        dist_utils.barrier()
+        # reduce
+        self.loss_map = dist_utils.reduce_tensor(self.loss_map, average=False)
+        self.acc_map = dist_utils.reduce_tensor(self.acc_map, average=False)
+        res = {
+            "loss": self.loss_map,
+            "acc": self.acc_map
+        }
+        if dist_utils.is_main_process():
+            torch.save(res, self.eval_fp)
+            self.logger.info("Saving eval file done")
 
     def __call__(self):
-        self.evaluator(self.model)
+        try:
+            res = torch.load(self.eval_fp, map_location=self.device)
+            assert self.loss_map.shape == res["loss"].shape
+            assert self.acc_map.shape == res["acc"].shape
+            self.loss_map = res["loss"]
+            self.acc_map = res["acc"]
+        except Exception as e:
+            self.logger.info("Load eval file failed: {}, re-generate eval file".format(e))
+            self.eval()
+        plot_contour(
+            coordinates_fp=self.coordinate_fp,
+            eval_fp=self.eval_fp,
+            save_path=self.save_path,
+            **self.plot_cfg
+        )
 
 
 def plot_2D_worker(
@@ -123,6 +185,7 @@ def plot_2D_worker(
 
     # get dataloader
     logger.info("Building dataset...")
+
     train_loader, n_classes = build_dataset(data_cfg, train_cfg)
     # create model
     logger.info("Building model...")
@@ -139,8 +202,6 @@ def plot_2D_worker(
         )
         logger.info("Loaded pretrain model: %s", train_cfg["pre_train"])
     model.to(device)
-    if distributed:
-        model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu_id])
     loss_fn = get_loss_fn(loss_cfg).to(device)
     # setup direction
     direction_fp = os.path.join(log_args.logdir, "direction.pth")
@@ -160,6 +221,9 @@ def plot_2D_worker(
             coordinate_cfg=plot_cfg["coordinate"],
             device=device
         )
+    eval_fp = os.path.join(log_args.logdir, "eval.pth")
+    # wait for the main process writing files
+    dist_utils.barrier()
     evaluator = Evaluation(
         loss_fn=loss_fn,
         val_loader=train_loader,
@@ -168,10 +232,14 @@ def plot_2D_worker(
     )
     worker = PlotWorker(
         coordinate_fp=coordinates_fp,
+        direction_fp=direction_fp,
+        save_path=log_args.logdir,
+        eval_fp=eval_fp,
         data_loader=train_loader,
         model=model,
         loss_fn=loss_fn,
         evaluator=evaluator,
+        plot_cfg=plot_cfg["cfg"],
         device=device
     )
     worker()

@@ -2,7 +2,6 @@ import logging
 from typing import Dict, Any
 
 import torch.utils.data as data
-from torch.utils.data.sampler import SequentialSampler
 
 import cv_lib.classification.data as cls_data
 import cv_lib.distributed.utils as dist_utils
@@ -27,7 +26,7 @@ def build_dataset(
             "Loaded %s dataset with %d train examples, %d classes",
             data_cfg["name"], len(train_dataset), n_classes
         )
-    train_sampler = SequentialSampler(train_dataset)
+    train_sampler = data.SequentialSampler(train_dataset)
     train_bs = train_cfg["batch_size"]
     train_workers = train_cfg["num_workers"]
     train_loader = data.DataLoader(

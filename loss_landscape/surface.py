@@ -20,9 +20,9 @@ def setup_coordinates(
         return
 
     coordinates = OrderedDict()
-    x_coordinates = torch.linspace(device=device, **coordinate_cfg["x_axis"])
-    coordinates["x_coordinates"] = x_coordinates
-    y_coordinates = torch.linspace(device=device, **coordinate_cfg["y_axis"])
-    coordinates["y_coordinates"] = y_coordinates
+    x_coordinate = torch.linspace(device=device, **coordinate_cfg["x_axis"])
+    coordinates["x_coordinate"] = x_coordinate
+    y_coordinate = torch.linspace(device=device, **coordinate_cfg["y_axis"])
+    coordinates["y_coordinate"] = y_coordinate
     torch.save(coordinates, coordinates_fp)
     logger.info("Write coordinates done")

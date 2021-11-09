@@ -84,15 +84,11 @@ class Evaluation:
                     tqdm_shower.update()
         if self.main_process:
             tqdm_shower.close()
-        dist_utils.barrier()
 
         # accumulate
         loss_meter.accumulate()
         loss_dict_meter.accumulate()
         acc_meter.accumulate()
-        loss_meter.sync()
-        loss_dict_meter.sync()
-        acc_meter.sync()
 
         ret = dict(
             loss=loss_meter.value(),
