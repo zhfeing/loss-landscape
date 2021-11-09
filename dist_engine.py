@@ -14,7 +14,7 @@ from cv_lib.config_parsing import get_train_logger, get_cfg
 from cv_lib.utils import to_json_str, str2bool
 
 from loss_landscape.utils.dist_utils import LogArgs, DistLaunchArgs
-from tasks.plot_2D_worker import plot_2D_worker
+from plot_2D_worker import plot_2D_worker
 
 
 def logger(args):

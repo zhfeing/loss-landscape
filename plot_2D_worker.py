@@ -1,7 +1,7 @@
 import os
 import logging
 from logging.handlers import QueueHandler
-from typing import Dict, Any, List
+from typing import Dict, Any
 import yaml
 import copy
 
@@ -24,7 +24,7 @@ from loss_landscape.utils import DistLaunchArgs, LogArgs
 from loss_landscape.direction import setup_direction
 from loss_landscape.surface import setup_coordinates
 from loss_landscape.model_setter import set_weights
-from loss_landscape.plot_contour import plot_contour
+from plot_contour import plot_contour
 from data import build_dataset
 
 

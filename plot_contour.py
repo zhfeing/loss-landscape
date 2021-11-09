@@ -3,21 +3,27 @@
 """
 import os
 import logging
-from typing import Dict
+from typing import Dict, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 import torch
 
+from loss_landscape.gerenate_vtk import generate_vtp
+
 
 def plot_contour(
     coordinates_fp: str,
     eval_fp: str,
     save_path: str,
-    levels: int
+    levels: int,
+    vtp_cfg: Dict[str, Any],
+    extension: str = "pdf"
 ):
     logger = logging.getLogger("plot_contour")
+    os.makedirs(save_path, exist_ok=True)
+
     coordinates: Dict[str, torch.Tensor] = torch.load(coordinates_fp, map_location="cpu")
     x_coordinate = coordinates["x_coordinate"].numpy()
     y_coordinate = coordinates["y_coordinate"].numpy()
@@ -75,16 +81,32 @@ def plot_contour(
         plt.close()
 
     z_loss = np.log10(z_loss)
-    plot_contour(z_err, os.path.join(save_path, "{name}_err.png"), levels)
-    plot_contour(z_loss, os.path.join(save_path, "{name}_log_loss.png"), levels)
+    plot_contour(z_err, os.path.join(save_path, "{name}_err." + extension), levels)
+    plot_contour(z_loss, os.path.join(save_path, "{name}_log_loss." + extension), levels)
+
+    generate_vtp(
+        eval_fp=eval_fp,
+        coordinates_fp=coordinates_fp,
+        save_fp=os.path.join(save_path, "surface_{name}.vtp"),
+        **vtp_cfg
+    )
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--coordinates_fp")
+    parser.add_argument("--eval_fp")
+    parser.add_argument("--save_path")
+    parser.add_argument("--levels", type=int)
+    args = parser.parse_args()
+
     plot_contour(
-        coordinates_fp="run/test/coordinates.pth",
-        eval_fp="run/test/eval.pth",
-        save_path="run/test",
-        levels=10
+        coordinates_fp=args.coordinates_fp,
+        eval_fp=args.eval_fp,
+        save_path=args.save_path,
+        levels=args.levels,
+        vtp_cfg=dict()
     )
 
 

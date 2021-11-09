@@ -36,6 +36,13 @@ plot:
       steps: 51
   cfg:
     levels: 5
+    vtp_cfg:
+      z_err_max: -1
+      z_loss_max: 1.0e+9
+      normalize_loss: 1.0
+      num_interpolate_points: 100
+      show_points: True
+      show_polys: True
 
 loss:
   name: ce_loss
