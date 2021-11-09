@@ -27,20 +27,20 @@ plot:
     ignore: bias_bn
   coordinate:
     x_axis:
-      start: -1
-      end: 1
-      steps: 51
+      start: -0.3
+      end: 0.3
+      steps: 11
     y_axis:
-      start: -1
-      end: 1
-      steps: 51
+      start: -0.3
+      end: 0.3
+      steps: 11
   cfg:
     levels: 5
     vtp_cfg:
       z_err_max: -1
       z_loss_max: 1.0e+9
       normalize_loss: 1.0
-      num_interpolate_points: 100
+      num_interpolate_points: -1
       show_points: True
       show_polys: True
 
