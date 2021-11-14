@@ -46,6 +46,7 @@ class EncoderLayer(nn.Module):
         norm_eps: float = 1.0e-5,
         use_entmax: bool = False,
         learnable_entmax_alpha: bool = False,
+        pre_norm: bool = True
     ):
         super().__init__()
         self.attention = MultiHeadSelfAttention(
@@ -62,8 +63,9 @@ class EncoderLayer(nn.Module):
         self.dropout2 = layers.get_dropout(dropout)
         self.identity1 = nn.Identity()
         self.identity2 = nn.Identity()
+        self.pre_norm = pre_norm
 
-    def forward(
+    def pre_forward(
         self,
         seq: Tensor,
         src_mask: Optional[Tensor] = None,
@@ -86,6 +88,41 @@ class EncoderLayer(nn.Module):
         seq = seq + self.dropout2(x)
         return seq
 
+    def post_forward(
+        self,
+        seq: Tensor,
+        src_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None
+    ):
+        x = self.attention(
+            seq,
+            attn_mask=src_mask,
+            key_padding_mask=src_key_padding_mask
+        )
+        x = self.norm1(x)
+        # for recording residual connection without dropout
+        self.identity1(seq + x)
+        seq = seq + self.dropout1(x)
+
+        x = self.mlp(seq)
+        x = self.norm2(x)
+        # for recording residual connection without dropout
+        self.identity2(seq + x)
+        seq = seq + self.dropout2(x)
+        return seq
+
+    def forward(
+        self,
+        seq: Tensor,
+        src_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None
+    ):
+        if self.pre_norm:
+            forward_fn = self.pre_forward
+        else:
+            forward_fn = self.post_forward
+        return forward_fn(seq, src_mask=src_mask, src_key_padding_mask=src_key_padding_mask)
+
 
 class Transformer(nn.Module):
     def __init__(
@@ -100,12 +137,14 @@ class Transformer(nn.Module):
         norm_eps: float = 1.0e-5,
         use_entmax: bool = False,
         learnable_entmax_alpha: bool = False,
+        pre_norm: bool = True
     ):
         super().__init__()
         self.num_encoder_layers = num_encoder_layers
         self.num_heads = num_heads
         self.embed_dim = embed_dim
         self.dim_feedforward = dim_feedforward
+        self.pre_norm = pre_norm
 
         self.norm = nn.LayerNorm(embed_dim, eps=norm_eps) if final_norm else None
 
@@ -118,11 +157,12 @@ class Transformer(nn.Module):
             activation=activation,
             norm_eps=norm_eps,
             use_entmax=use_entmax,
-            learnable_entmax_alpha=learnable_entmax_alpha
+            learnable_entmax_alpha=learnable_entmax_alpha,
+            pre_norm=pre_norm
         )
         self.layers = nn.ModuleList([encoder_layer() for _ in range(num_encoder_layers)])
 
-    def forward(
+    def pre_forward(
         self,
         seq: Tensor,
         src_mask: Optional[Tensor] = None,
@@ -138,3 +178,30 @@ class Transformer(nn.Module):
             seq = self.norm(seq)
         return seq
 
+    def post_forward(
+        self,
+        seq: Tensor,
+        src_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None
+    ):
+        if self.norm is not None:
+            seq = self.norm(seq)
+        for layer in self.layers:
+            seq = layer(
+                seq,
+                src_mask=src_mask,
+                src_key_padding_mask=src_key_padding_mask
+            )
+        return seq
+
+    def forward(
+        self,
+        seq: Tensor,
+        src_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None
+    ):
+        if self.pre_norm:
+            forward_fn = self.pre_forward
+        else:
+            forward_fn = self.post_forward
+        return forward_fn(seq, src_mask=src_mask, src_key_padding_mask=src_key_padding_mask)

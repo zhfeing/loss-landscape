@@ -41,6 +41,8 @@ def get_base_mutual_model(model_cfg: Dict[str, Any], num_classes: int) -> Mutual
 def get_joint_model(model_cfg: Dict[str, Any], num_classes: int) -> JointModel:
     # get vit base model
     vit_cfg = model_cfg["vit"]
+    cnn_cfg = model_cfg["cnn"]
+
     vit = get_model(
         model_cfg=vit_cfg,
         num_classes=num_classes,
@@ -49,11 +51,13 @@ def get_joint_model(model_cfg: Dict[str, Any], num_classes: int) -> JointModel:
 
     joint_model = JointModel(
         vit=vit,
-        norm_cfg=vit_cfg["norm"],
+        input_proj_cfg=cnn_cfg["input_proj"],
+        norm_cfg=cnn_cfg["norm"],
         bias=True,
         extract_cnn=model_cfg["extract_layers_cnn"],
         extract_vit=model_cfg["extract_layers_vit"],
-        **vit_cfg["patch_embed"],
+        down_sample_layers=cnn_cfg.get("down_sample_layers", list()),
+        cnn_pre_norm=cnn_cfg["pre_norm"],
         **vit_cfg["transformer"],
     )
     return joint_model

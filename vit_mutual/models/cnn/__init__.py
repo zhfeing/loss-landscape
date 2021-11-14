@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Dict, Any
-
-import torch.nn as nn
+import logging
 
 from .cnn import CNN
 from .blocks import get_cnn_block, get_conv_block, get_mlp, get_input_proj
@@ -9,6 +8,11 @@ from vit_mutual.models.layers import Norm_fn
 
 
 def get_cnn(cnn_cfg: Dict[str, Any], num_classes: int) -> CNN:
+    logger = logging.getLogger("get_cnn")
+    pre_norm = cnn_cfg.get("pre_norm", True)
+    if not pre_norm:
+        logger.warning("Building CNN with post norm mode")
+
     embed_dim = cnn_cfg["embed_dim"]
     activation = cnn_cfg["activation"]
     norm_fn = Norm_fn(cnn_cfg["norm"])
@@ -32,7 +36,8 @@ def get_cnn(cnn_cfg: Dict[str, Any], num_classes: int) -> CNN:
         conv_block=conv_fn,
         mlp_block=mlp_fn,
         norm=norm_fn,
-        dropout=cnn_cfg.get("dropout", None)
+        dropout=cnn_cfg.get("dropout", None),
+        pre_norm=pre_norm
     )
     input_proj = get_input_proj(
         embed_dim=embed_dim,

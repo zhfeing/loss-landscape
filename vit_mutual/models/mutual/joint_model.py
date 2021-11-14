@@ -1,5 +1,5 @@
 import math
-from functools import partial
+import logging
 from typing import Any, Dict, Callable, List, Tuple
 from collections import OrderedDict
 from copy import deepcopy
@@ -15,6 +15,7 @@ from vit_mutual.models.transformer.transformer import MLP, MultiHeadSelfAttentio
 from vit_mutual.models.cnn.blocks import CNNBlock
 from vit_mutual.models.cnn.blocks.conv import conv_2d, Conv_2d
 from vit_mutual.models.layers import get_activation_fn, Norm_fn
+from vit_mutual.models.cnn import get_input_proj
 
 
 class SharedConv(nn.Module):
@@ -91,7 +92,9 @@ class MutualCNN(nn.Module):
         num_classes: int,
         norm_fn: Callable[[Dict[str, Any]], nn.Module],
         activation: str = "relu",
-        dropout: float = None
+        dropout: float = None,
+        down_sample_layers: List[int] = list(),
+        pre_norm: bool = True,
     ):
         super().__init__()
         self.input_proj = input_proj
@@ -102,7 +105,8 @@ class MutualCNN(nn.Module):
                 conv_block=b1,
                 mlp_block=b2,
                 norm=norm_fn,
-                dropout=dropout
+                dropout=dropout,
+                pre_norm=pre_norm
             )
             layers.append(block)
         self.layers = layers
@@ -111,10 +115,19 @@ class MutualCNN(nn.Module):
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.linear = nn.Linear(embed_dim, num_classes)
 
+        self.downsample = nn.ModuleDict()
+        for layer_id in range(len(self.layers)):
+            if layer_id in down_sample_layers:
+                layer = nn.AvgPool2d(kernel_size=2, stride=2)
+            else:
+                layer = nn.Identity()
+            self.downsample[f"{layer_id}"] = layer
+
     def forward(self, x: torch.Tensor):
         x = self.input_proj(x)
-        for layer in self.layers:
+        for layer_id, layer in enumerate(self.layers):
             x = layer(x)
+            x = self.downsample[f"{layer_id}"](x)
         x = self.activation(self.bn(x))
         x = self.avg_pool(x)
         x = torch.flatten(x, 1)
@@ -126,24 +139,20 @@ class JointModel(nn.Module):
     def __init__(
         self,
         vit: ViT,
-        image_channels: int,
         embed_dim: int,
-        patch_size: int,
+        input_proj_cfg: Dict[str, Any],
         norm_cfg: Dict[str, Any],
         activation: str = "relu",
         dropout: float = None,
         extract_cnn: List[str] = list(),
         extract_vit: List[str] = list(),
+        down_sample_layers: List[int] = list(),
+        cnn_pre_norm: bool = True,
         **kwargs
     ):
         super().__init__()
         # input embedding layer
-        input_proj = nn.Conv2d(
-            image_channels,
-            embed_dim,
-            kernel_size=patch_size,
-            stride=patch_size
-        )
+        input_proj = get_input_proj(embed_dim, input_proj_cfg)
         # share layers
         mhsa = [SharedConv(mhsa) for mhsa in vit.get_mhsa()]
         mlp = [SharedMLP(mlp) for mlp in vit.get_mlp()]
@@ -157,7 +166,9 @@ class JointModel(nn.Module):
             num_classes=vit.num_classes,
             norm_fn=norm_fn,
             activation=activation,
-            dropout=dropout
+            dropout=dropout,
+            down_sample_layers=down_sample_layers,
+            pre_norm=cnn_pre_norm
         )
         self.models = nn.ModuleDict()
         self.extractors: Dict[str, MidExtractor] = OrderedDict()
