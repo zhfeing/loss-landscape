@@ -38,8 +38,8 @@ plot:
     levels: 5
     vtp_cfg:
       z_err_max: -1
-      z_loss_max: 1.0e+9
-      normalize_loss: null
+      z_loss_max: 10
+      normalize_loss: -1
       num_interpolate_points: -1
       show_points: True
       show_polys: True

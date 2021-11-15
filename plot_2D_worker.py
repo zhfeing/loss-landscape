@@ -187,7 +187,7 @@ def plot_2D_worker(
     # get dataloader
     logger.info("Building dataset...")
 
-    train_loader, n_classes = build_dataset(data_cfg, train_cfg)
+    train_loader, n_classes = build_dataset(data_cfg, train_cfg, use_train_set=train_cfg.get("use_train", True))
     # create model
     logger.info("Building model...")
     model = get_model(model_cfg, n_classes)

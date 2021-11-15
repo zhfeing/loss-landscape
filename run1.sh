@@ -14,6 +14,6 @@ python dist_engine.py \
     --seed ${seed} \
     --multiprocessing \
     --file-name-cfg loss_landscape \
-    --cfg-filepath config/plot-vit_mutual.yaml \
-    --log-dir run/cifar100/vit_mutual_zhf \
+    --cfg-filepath config/plot-vit_mutual_base.yaml \
+    --log-dir run/cifar100/vit-mutual-base \
     --worker plot_2D_worker &

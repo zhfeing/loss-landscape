@@ -12,34 +12,39 @@ from .aug import get_data_aug
 def build_dataset(
     data_cfg: Dict[str, Any],
     train_cfg: Dict[str, Any],
+    use_train_set: bool = True
 ):
     logger = logging.getLogger("build_dataset")
     # get dataloader
     train_aug = get_data_aug(data_cfg["name"], "train")
-    train_dataset, _, n_classes = cls_data.get_dataset(
+    train_dataset, val_dataset, n_classes = cls_data.get_dataset(
         data_cfg,
         train_aug,
-        None
+        train_aug
     )
+    if use_train_set:
+        dataset = train_dataset
+    else:
+        dataset = val_dataset
     if dist_utils.is_main_process():
         logger.info(
             "Loaded %s dataset with %d train examples, %d classes",
-            data_cfg["name"], len(train_dataset), n_classes
+            data_cfg["name"], len(dataset), n_classes
         )
-    train_sampler = data.SequentialSampler(train_dataset)
+    sampler = data.SequentialSampler(dataset)
     train_bs = train_cfg["batch_size"]
     train_workers = train_cfg["num_workers"]
-    train_loader = data.DataLoader(
-        train_dataset,
+    loader = data.DataLoader(
+        dataset,
         batch_size=train_bs,
         num_workers=train_workers,
         pin_memory=True,
-        sampler=train_sampler,
+        sampler=sampler,
     )
     logger.info(
-        "Build train dataset done\nTraining: %d imgs, %d batchs",
-        len(train_dataset),
-        len(train_loader),
+        "Build dataset done\nTraining: %d imgs, %d batchs",
+        len(dataset),
+        len(loader),
     )
-    return train_loader, n_classes
+    return loader, n_classes
 
