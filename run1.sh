@@ -4,7 +4,7 @@ export TORCH_HOME=/home/zhfeing/model-zoo
 seed=1029
 
 port=9902
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0,1,2,3,6,7
 
 python dist_engine.py \
     --num-nodes 1 \
@@ -15,5 +15,5 @@ python dist_engine.py \
     --multiprocessing \
     --file-name-cfg loss_landscape \
     --cfg-filepath config/plot-vit_mutual.yaml \
-    --log-dir run/cifar100/vit_mutual \
+    --log-dir run/cifar100/vit_mutual_zhf \
     --worker plot_2D_worker &

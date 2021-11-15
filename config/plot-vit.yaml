@@ -41,19 +41,19 @@ plot:
     ignore: bias_bn
   coordinate:
     x_axis:
-      start: -0.5
-      end: 0.5
+      start: -1
+      end: 1
       steps: 21
     y_axis:
-      start: -0.5
-      end: 0.5
+      start: -1
+      end: 1
       steps: 21
   cfg:
     levels: 5
     vtp_cfg:
       z_err_max: -1
       z_loss_max: 1.0e+9
-      normalize_loss: null
+      normalize_loss: -1
       num_interpolate_points: -1
       show_points: True
       show_polys: True

@@ -118,12 +118,13 @@ class PlotWorker:
         except Exception as e:
             self.logger.info("Load eval file failed: {}, re-generate eval file".format(e))
             self.eval()
-        plot_contour(
-            coordinates_fp=self.coordinate_fp,
-            eval_fp=self.eval_fp,
-            save_path=self.save_path,
-            **self.plot_cfg
-        )
+        if dist_utils.is_main_process():
+            plot_contour(
+                coordinates_fp=self.coordinate_fp,
+                eval_fp=self.eval_fp,
+                save_path=self.save_path,
+                **self.plot_cfg
+            )
 
 
 def plot_2D_worker(
