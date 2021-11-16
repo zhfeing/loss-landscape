@@ -1,10 +1,11 @@
 dataset:
-  name: cifar_100
-  root: ~/datasets/cifar
+  name: imagenet
+  root: ~/datasets/ILSVRC2012
   train:
     split: train
+    make_partial: 0.01
   val:
-    split: test
+    split: val
   resize: 224
 
 training:
@@ -13,27 +14,13 @@ training:
   val_interval: 1000
   batch_size: 64
   num_workers: 16
-  sync_bn: True
-  pre_train: ~/project/ViT-research/run/cifar100/vit/light/vit-s-1029/ckpt/best.pth
+  sync_bn: False
+  pre_train: ~/model-zoo/hub/checkpoints/resnet50-19c8e357.pth
 
 model:
-  name: vit
-  transformer:
-    embed_dim: 288
-    num_encoder_layers: 6
-    num_heads: 9
-    dim_feedforward: 1152   # embed_dim * 4
-    dropout: 0.1
-    activation: gelu
-    final_norm: True
-  patch_embed:
-    name: vit_like
-    img_size: 224
-    patch_size: 16
-    image_channels: 3
-  pos_encoding:
-    name: learnable
-    dropout: null
+  # cfg names
+  name: official_models
+  model_name: ResNet50
 
 plot:
   direction:
