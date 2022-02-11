@@ -4,7 +4,7 @@ export TORCH_HOME=/home/zhfeing/model-zoo
 seed=1029
 
 port=9201
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 python dist_engine.py \
     --num-nodes 1 \
@@ -14,6 +14,6 @@ python dist_engine.py \
     --seed ${seed} \
     --multiprocessing \
     --file-name-cfg loss_landscape \
-    --cfg-filepath config/val/plot-cnn.yaml \
-    --log-dir run/cifar100/val/agent \
-    --worker plot_2D_worker &
+    --cfg-filepath config/val/plot-vit_joint.yaml \
+    --log-dir run/cifar100/val/vit_joint \
+    --worker plot_2D_worker 

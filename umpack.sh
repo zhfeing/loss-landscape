@@ -7,5 +7,5 @@ port=9902
 export CUDA_VISIBLE_DEVICES=0
 
 python convert_mutual.py \
-    --mutual-ckpt ~/project/ViT-research/run/joint-demo-s-1029/ckpt/best.pth \
-    --out-dir run/unpack_joint_base
+    --mutual-ckpt ~/nfs3/joint-vit-s-cifar100-best.pth \
+    --out-dir run/unpack_joint-vit-s-cifar100
